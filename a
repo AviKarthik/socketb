@@ -1,0 +1,37 @@
+int main(void)
+{
+   int sock_b;
+   int client;
+   struct sockaddr_in addy;
+   struct sockaddr_in a_data;
+   socklen_t addrlen = sizeof(addy);
+   char buffer[1024] = {0};
+   int valread;
+
+
+   sock_b = socket(AF_INET, SOCK_DGRAM, 0);
+   addy.sin_family = AF_INET;
+   addy.sin_port = htons(PORT);
+   inet_pton(AF_INET, "127.0.0.2", &addy.sin_addr);
+
+
+
+   if(bind(sock_b, (struct sockaddr*)&addy, sizeof(addy)) < 0){
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+   }
+   
+   
+
+   recvfrom(sock_b, *buffer, sizeof(buffer), 0, &a_data, sizeof(a_data));
+   valread = read(sock_b, buffer, 1023);
+   printf("received: ");
+   printf("%s\n", buffer);
+   printf("\n");
+   sendto(sock_b, "hello back", sizeof("hello back"), 0, &a_data, sizeof(a_data));
+   printf("\n Hello message sent from socket b");
+
+   close(sock_b);
+
+   return 0;
+}
