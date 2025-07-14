@@ -1,0 +1,49 @@
+#include <stdio.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#define PORT 8080
+
+int main(void)
+{
+   int sock_a;
+   int client;
+   struct sockaddr_in addy;
+   struct sockaddr_in b_data;
+   socklen_t addrlen = sizeof(addy);
+   char buffer[1024] = {0};
+   int valread;
+
+
+   sock_a = socket(AF_INET, SOCK_DGRAM, 0);
+   addy.sin_family = AF_INET;
+   addy.sin_port = htons(PORT);
+   inet_pton(AF_INET, "127.0.0.1", &addy.sin_addr);
+
+   b_data.sin_family = AF_INET;
+   b_data.sin_port = htons(8980);
+   inet_pton(AF_INET, "127.0.0.1", &b_data.sin_addr);
+
+
+   if(bind(sock_a, (struct sockaddr*)&addy, sizeof(addy)) < 0){
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+   }
+   
+   socklen_t b_data_len = 0;
+
+   sendto(sock_a, "hello", strlen("hello"), 0, (const struct sockaddr*) &b_data, sizeof(b_data));
+   printf("\n Hello message sent from socket a");
+   recvfrom(sock_a, buffer, sizeof(buffer), 0, (struct sockaddr*)&b_data, &b_data_len);
+   printf("received: ");
+   printf("%s\n", buffer);
+   printf("\n");
+
+   close(sock_a);
+
+   return 0;
+}
