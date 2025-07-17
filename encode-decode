@@ -1,0 +1,132 @@
+const uint8_t HEADER_BYTE = 77;
+const uint8_t FOOTER_BYTE = 88;
+const uint8_t ID_PWM_CMD = 1;
+const uint8_t ID_FORCE_SENSOR_CMD = 2;
+
+int response_verify(uint8_t val[]);
+
+
+
+struct SerialPacket {
+  uint8_t header;
+  uint8_t id;
+  uint8_t len;
+  uint8_t data[4];
+  uint8_t footer;
+  uint8_t status;
+};
+
+
+int response_verify(uint8_t val[]) {
+
+  if (val[0] != HEADER_BYTE) {
+    return 0;
+  }
+
+  uint8_t dataLength = val[2];
+
+  if (val[4 + dataLength] != FOOTER_BYTE) {
+    return 0;
+  }
+
+  if(val[1] != 1 && val[1] != 2){
+    return 0;
+  }
+
+  return 1;
+}
+
+int cmd_verify(uint8_t val[]) {
+
+
+
+  if (val[0] != HEADER_BYTE) {
+    return 0;
+  }
+
+  uint8_t dataLength = val[2];
+
+  if (val[3 + dataLength] != FOOTER_BYTE) {
+    return 0;
+  }
+
+  if(val[1] != 1 && val[1] != 2){
+    return 0;
+  }
+
+  return 1;
+}
+
+struct SerialPacket response_decode(uint8_t data[]){
+  struct SerialPacket s;
+  if(response_verify(data) == 1){
+    s.header = data[0];
+    s.footer = data[4+data[2]];
+    s.id = data[1];
+    s.len = data[2];
+    s.status = data[3];
+    if(s.len != 0){
+      memcpy(&s.data[0], &data[4], s.len);
+    }
+    return s;
+  }
+  else{
+    struct SerialPacket s;
+    s.id = 0;
+    return s;
+  }
+}
+
+struct SerialPacket cmd_decode(uint8_t data[]){
+  struct SerialPacket s;
+  if(cmd_verify(data) == 1){
+    s.header = data[0];
+    s.footer = data[3+data[2]];
+    s.id = data[1];
+    s.len = data[2];
+    if(s.len != 0){
+      memcpy(&s.data[0], &data[3], s.len);
+    }
+    return s;
+  }
+  else{
+    struct SerialPacket s;
+    s.id = 0;
+    return s;
+  }
+}
+
+
+void response_encode(struct SerialPacket s, uint8_t data[]){
+  if(s.id == ID_FORCE_SENSOR_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = s.status;
+    memcpy(&data[4], s.data, s.len);
+    data[4+s.len] = 88;
+  }
+  else if(s.id == ID_PWM_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = s.status;
+    data[4] = 88;
+  }
+}
+
+void cmd_encode(struct SerialPacket s, uint8_t data[]){
+  if(s.id == ID_PWM_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    memcpy(&data[3], s.data, s.len);
+    data[3+s.len] = 88;
+  }
+  else if(s.id == ID_FORCE_SENSOR_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = 88;
+  }
+}
