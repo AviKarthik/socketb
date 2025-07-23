@@ -2,6 +2,7 @@ const uint8_t HEADER_BYTE = 77;
 const uint8_t FOOTER_BYTE = 88;
 const uint8_t ID_PWM_CMD = 1;
 const uint8_t ID_FORCE_SENSOR_CMD = 2;
+const uint8_t ID_PWM_READ = 3;
 
 int response_verify(uint8_t val[]);
 int bytesRead;
@@ -104,7 +105,7 @@ struct SerialPacket cmd_decode(uint8_t data[]){
 
 
 void response_encode(struct SerialPacket s, uint8_t data[]){
-  if(s.id == ID_FORCE_SENSOR_CMD){
+  if(s.id == ID_FORCE_SENSOR_CMD || s.id == ID_PWM_READ){
     data[0] = 77;
     data[1] = s.id;
     data[2] = s.len;
@@ -129,7 +130,7 @@ void cmd_encode(struct SerialPacket s, uint8_t data[]){
     memcpy(&data[3], s.data, s.len);
     data[3+s.len] = 88;
   }
-  else if(s.id == ID_FORCE_SENSOR_CMD){
+  else if(s.id == ID_FORCE_SENSOR_CMD || s.id == ID_PWM_READ){
     data[0] = 77;
     data[1] = s.id;
     data[2] = s.len;
@@ -143,6 +144,12 @@ int pwm(int pow){
   int motorSpeed = ((255)*((float)pow/100));
   analogWrite(6, motorSpeed);
   return 0;
+}
+
+uint8_t pulse(){
+  uint8_t p;
+  p = pulseIn(3, HIGH, 1000);
+  return p/10;
 }
 
 float fs(){
@@ -198,6 +205,17 @@ void loop() {
         response_encode(s, transmit);
         Serial.write(transmit, sizeof(transmit));
         
+      }
+
+      else if (commandId == ID_PWM_READ){
+        uint8_t transmit[6];
+        uint8_t pulse_val;
+        s.len = sizeof(pulse);
+        pulse_val = pulse();
+        s.status = 0;
+        memcpy(&s.data, &pulse_val, s.len);
+        response_encode(s, transmit);
+        Serial.write(transmit, sizeof(transmit));
       }
       else {
         uint8_t transmit[5];
