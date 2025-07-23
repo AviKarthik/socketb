@@ -1,0 +1,210 @@
+const uint8_t HEADER_BYTE = 77;
+const uint8_t FOOTER_BYTE = 88;
+const uint8_t ID_PWM_CMD = 1;
+const uint8_t ID_FORCE_SENSOR_CMD = 2;
+
+int response_verify(uint8_t val[]);
+int bytesRead;
+uint8_t value[64];
+uint8_t pwm_duty_cycles;
+float pos;
+float neg;
+float force;
+uint8_t ref_v = 5;
+
+
+struct SerialPacket {
+  uint8_t header;
+  uint8_t id;
+  uint8_t len;
+  uint8_t data[4];
+  uint8_t footer;
+  uint8_t status;
+};
+
+
+int response_verify(uint8_t val[]) {
+
+  if (val[0] != HEADER_BYTE) {
+    return 0;
+  }
+
+  uint8_t dataLength = val[2];
+
+  if (val[4 + dataLength] != FOOTER_BYTE) {
+    return 0;
+  }
+
+  if(val[1] != 1 && val[1] != 2){
+    return 0;
+  }
+
+  return 1;
+}
+
+int cmd_verify(uint8_t val[]) {
+
+
+
+  if (val[0] != HEADER_BYTE) {
+    return 0;
+  }
+
+  uint8_t dataLength = val[2];
+
+  if (val[3 + dataLength] != FOOTER_BYTE) {
+    return 0;
+  }
+
+  if(val[1] != 1 && val[1] != 2){
+    return 0;
+  }
+
+  return 1;
+}
+
+struct SerialPacket response_decode(uint8_t data[]){
+  struct SerialPacket s;
+  if(response_verify(data) == 1){
+    s.header = data[0];
+    s.footer = data[4+data[2]];
+    s.id = data[1];
+    s.len = data[2];
+    s.status = data[3];
+    if(s.len != 0){
+      memcpy(&s.data[0], &data[4], s.len);
+    }
+    return s;
+  }
+  else{
+    struct SerialPacket s;
+    s.id = 0;
+    return s;
+  }
+}
+
+struct SerialPacket cmd_decode(uint8_t data[]){
+  struct SerialPacket s;
+  if(cmd_verify(data) == 1){
+    s.header = data[0];
+    s.footer = data[3+data[2]];
+    s.id = data[1];
+    s.len = data[2];
+    if(s.len != 0){
+      memcpy(&s.data[0], &data[3], s.len);
+    }
+    return s;
+  }
+  else{
+    struct SerialPacket s;
+    s.id = 0;
+    return s;
+  }
+}
+
+
+void response_encode(struct SerialPacket s, uint8_t data[]){
+  if(s.id == ID_FORCE_SENSOR_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = s.status;
+    memcpy(&data[4], s.data, s.len);
+    data[4+s.len] = 88;
+  }
+  else if(s.id == ID_PWM_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = s.status;
+    data[4] = 88;
+  }
+}
+
+void cmd_encode(struct SerialPacket s, uint8_t data[]){
+  if(s.id == ID_PWM_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    memcpy(&data[3], s.data, s.len);
+    data[3+s.len] = 88;
+  }
+  else if(s.id == ID_FORCE_SENSOR_CMD){
+    data[0] = 77;
+    data[1] = s.id;
+    data[2] = s.len;
+    data[3] = 88;
+  }
+}
+
+
+
+int pwm(int pow){
+  int motorSpeed = ((255)*((float)pow/100));
+  analogWrite(6, motorSpeed);
+  return 0;
+}
+
+float fs(){
+  pos = analogRead(14);
+  neg = analogRead(15);
+  pos = (pos*ref_v)/1023;
+  neg = (neg*ref_v)/1023;
+  return (pos-neg)*40;
+}
+
+void setup() {
+  analogWrite(6, 0);
+  Serial.begin(115200);
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    bytesRead = Serial.readBytesUntil((char)FOOTER_BYTE, value, sizeof(value));
+
+    if (bytesRead < sizeof(value)) {
+        value[bytesRead] = FOOTER_BYTE;
+        bytesRead++;
+    } else {
+        Serial.println("err: Buffer too small or footer not found.");
+        while (Serial.available()) {
+            Serial.read();
+        }
+        return;
+    }
+
+    SerialPacket s = cmd_decode(value);
+    if (s.id != 0) {
+      uint8_t commandId = s.id;
+      if(commandId == ID_FORCE_SENSOR_CMD){
+        float fs_val;
+        s.len = sizeof(fs_val);
+        fs_val = fs();
+        s.status = 0;
+        memcpy(&s.data, &fs_val, s.len);
+        uint8_t transmit[9];
+        response_encode(s, transmit);
+        Serial.write(transmit, sizeof(transmit));
+      } 
+      
+      else if (commandId == ID_PWM_CMD) {
+        uint8_t transmit[5];
+        if (value[2] == sizeof(uint8_t)) {
+          memcpy(&pwm_duty_cycles, &s.data[0], sizeof(uint8_t));
+          s.status = pwm(pwm_duty_cycles);
+        } else {
+          s.status = 1;
+        }
+        response_encode(s, transmit);
+        Serial.write(transmit, sizeof(transmit));
+        
+      }
+      else {
+        uint8_t transmit[5];
+        response_encode(s, transmit);
+        transmit[3] = 1;
+        Serial.write(transmit, sizeof(transmit));
+      }
+    }
+  }
+}
